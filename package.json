@@ -2,14 +2,25 @@
   "name": "til",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "type": "module",
+  "bin": {
+    "til": "bin/index.js"
+  },
+  "files": [
+    "bin/index.js",
+    "bundle/**/*.js"
+  ],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "spago build --config=prod.dhall",
+    "bundle": "npm run build && purs-backend-es bundle-module --platform=node --no-build --to \"./bundle/Main/index.js\""
   },
   "author": "",
   "license": "ISC",
   "devDependencies": {
     "@types/node": "^18.11.2",
+    "esbuild": "^0.15.12",
+    "purs-backend-es": "^1.2.0",
     "typescript": "^4.8.4"
   }
 }
