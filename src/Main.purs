@@ -26,7 +26,8 @@ import Effect.Aff as Aff
 import Effect.Class as Effect
 import Effect.Class.Console as Console
 import Effect.Exception as Exception
-import Node.ChildProcess (Exit(..))
+import Node.ChildProcess (ChildProcess, Exit(..))
+import Node.ChildProcess as ChildProcess
 import Node.Encoding (Encoding(..))
 import Node.FS.Aff as FS.Aff
 import Node.FS.Async as FS.Async
@@ -38,6 +39,7 @@ import TIL.FS as TIL.FS
 import TIL.Process as TIL.Process
 import TIL.Title (Title)
 import TIL.Title as Title
+import Unsafe.Coerce as Unsafe
 
 type EditParams =
   { title :: Title
@@ -172,7 +174,11 @@ main = Aff.launchAff_ do
                     <> "--line-range=:500 {}.md\" --preview-window=right,70%,border-none"
                 echoEntries = "echo " <> show (String.joinWith "\n" (Slug.toString <$> existingEntries))
                 echoAndFzf = echoEntries <> " | " <> fzfList
-              _ <- TIL.Process.exec echoAndFzf identity
+                stdio = ChildProcess.inherit # Array.mapWithIndex \i x -> if i == 1 then Nothing else x
+
+              _ <- TIL.Process.spawn echoAndFzf []
+                -- TODO: shell should be in SpawnOptions
+                (Unsafe.unsafeCoerce (_ { stdio = stdio, shell = true }))
               Debug.traceM "No title specified"
               Debug.traceM "TODO: here we should show fzf"
               Debug.traceM { existingEntries }
@@ -240,3 +246,6 @@ whenNothingM mma ma = mma >>= Maybe.maybe ma pure
 
 onNothingM :: forall m a. Monad m => m a -> m (Maybe a) -> m a
 onNothingM = flip whenNothingM
+
+-- | Might not use
+foreign import interactive :: forall a. a

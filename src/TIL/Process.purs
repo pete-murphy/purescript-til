@@ -73,4 +73,3 @@ spawn command args modifyOptions = Aff.makeAff \k -> do
   let
     canceler = Aff.effectCanceler (ChildProcess.kill killSignal childProcess)
   pure canceler
-
