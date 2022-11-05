@@ -143,7 +143,7 @@ main = Aff.launchAff_ do
                   <>
                     -- Remove the extension
                     "xargs -0 basename -s .md"
-            rawEntries <- TIL.Process.exec listAllFiles (_ { cwd = Just entriesPath }) <#> _.stdout
+            rawEntries <- TIL.Process.exec listAllFiles (_ { cwd = Just entriesPath }) Nothing <#> _.stdout
               >>> String.trim
               >>> String.NonEmpty.fromString
               >>> Foldable.foldMap (String.NonEmpty.toString >>> String.split (Pattern "\n"))
@@ -165,11 +165,15 @@ main = Aff.launchAff_ do
                   Debug.traceM ("Writing to: " <> newFileName)
                   FS.Aff.writeTextFile UTF8 newFileName ("Testing:\n\n" <> String.joinWith "\n" mediaFilePaths)
             Nothing -> do
+              let
+                fzfList =
+                  "fzf --no-multi --layout=reverse --margin 7% "
+                    <> "--border=none --preview \"bat --color=always --style=plain "
+                    <> "--line-range=:500 {}.md\" --preview-window=right,70%,border-none"
+              _ <- TIL.Process.exec fzfList identity (Just (String.joinWith "\n" (Slug.toString <$> existingEntries)))
               Debug.traceM "No title specified"
               Debug.traceM "TODO: here we should show fzf"
               Debug.traceM { existingEntries }
-
-  --  "fzf --no-multi --layout=reverse --margin 7% --border=none --preview \"bat --color=always --style=plain --line-range=:500 {}.md\" --preview-window=right,70%,border-none"
 
   where
   askToMake :: String -> Aff Unit
@@ -194,7 +198,7 @@ handleEditNew tilPath = do
 
 handleSync :: String -> Aff Unit
 handleSync tilPath = do
-  gitStatusResult <- TIL.Process.exec (String.joinWith " " [ "git", "-C", tilPath, "status", "--porcelain" ]) (_ { cwd = Just tilPath })
+  gitStatusResult <- TIL.Process.exec (String.joinWith " " [ "git", "-C", tilPath, "status", "--porcelain" ]) (_ { cwd = Just tilPath }) Nothing
   case gitStatusResult.exit, gitStatusResult.stdout of
     Normally 0, stdout
       | String.null stdout -> do
@@ -217,7 +221,7 @@ handleSync tilPath = do
       fetch = "git -C " <> tilPath <> " fetch origin main -q"
       rebase = "git -C " <> tilPath <> " rebase -q"
       fetchAndRebase = fetch <> " && " <> rebase
-    TIL.Process.exec fetchAndRebase (_ { timeout = Just 5_000.0 })
+    TIL.Process.exec fetchAndRebase (_ { timeout = Just 5_000.0 }) Nothing
 
   case gitFetchAndRebaseResult.exit of
     Normally 0 -> pure unit

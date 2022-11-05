@@ -7,7 +7,9 @@ module TIL.Process
 import Prelude
 
 import Data.Either (Either(..))
+import Data.Either as Either
 import Data.Foldable as Foldable
+import Data.Maybe (Maybe)
 import Data.Maybe as Maybe
 import Data.Posix.Signal (Signal(..))
 import Effect.Aff (Aff)
@@ -25,8 +27,8 @@ type Result =
   , exit :: Exit
   }
 
-exec :: String -> (ExecOptions -> ExecOptions) -> Aff Result
-exec command modifyOptions = Aff.makeAff \k -> do
+exec :: String -> (ExecOptions -> ExecOptions) -> Maybe String -> Aff Result
+exec command modifyOptions maybeStdin = Aff.makeAff \k -> do
   let
     options = modifyOptions ChildProcess.defaultExecOptions
     encoding = Maybe.fromMaybe UTF8 options.encoding
@@ -38,6 +40,15 @@ exec command modifyOptions = Aff.makeAff \k -> do
     k (Right { stderr: stderr', stdout: stdout', exit: Normally 0 })
 
   ChildProcess.onError childProcess (k <<< Left <<< ChildProcess.toStandardError)
+
+  Foldable.for_ maybeStdin \stdin ->
+    Stream.writeString (ChildProcess.stdin childProcess) encoding ("\n" <> stdin)
+      ( k <<< Either.either Right Left <<< Either.note
+          { exit: Normally 1
+          , stderr: mempty
+          , stdout: mempty
+          }
+      )
 
   let
     canceler = Aff.effectCanceler (ChildProcess.kill killSignal childProcess)
