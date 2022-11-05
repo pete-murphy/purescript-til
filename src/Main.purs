@@ -143,7 +143,7 @@ main = Aff.launchAff_ do
                   <>
                     -- Remove the extension
                     "xargs -0 basename -s .md"
-            rawEntries <- TIL.Process.exec listAllFiles (_ { cwd = Just entriesPath }) Nothing <#> _.stdout
+            rawEntries <- TIL.Process.exec listAllFiles (_ { cwd = Just entriesPath }) <#> _.stdout
               >>> String.trim
               >>> String.NonEmpty.fromString
               >>> Foldable.foldMap (String.NonEmpty.toString >>> String.split (Pattern "\n"))
@@ -170,7 +170,9 @@ main = Aff.launchAff_ do
                   "fzf --no-multi --layout=reverse --margin 7% "
                     <> "--border=none --preview \"bat --color=always --style=plain "
                     <> "--line-range=:500 {}.md\" --preview-window=right,70%,border-none"
-              _ <- TIL.Process.exec fzfList identity (Just (String.joinWith "\n" (Slug.toString <$> existingEntries)))
+                echoEntries = "echo " <> show (String.joinWith "\n" (Slug.toString <$> existingEntries))
+                echoAndFzf = echoEntries <> " | " <> fzfList
+              _ <- TIL.Process.exec echoAndFzf identity
               Debug.traceM "No title specified"
               Debug.traceM "TODO: here we should show fzf"
               Debug.traceM { existingEntries }
@@ -198,7 +200,7 @@ handleEditNew tilPath = do
 
 handleSync :: String -> Aff Unit
 handleSync tilPath = do
-  gitStatusResult <- TIL.Process.exec (String.joinWith " " [ "git", "-C", tilPath, "status", "--porcelain" ]) (_ { cwd = Just tilPath }) Nothing
+  gitStatusResult <- TIL.Process.exec (String.joinWith " " [ "git", "-C", tilPath, "status", "--porcelain" ]) (_ { cwd = Just tilPath })
   case gitStatusResult.exit, gitStatusResult.stdout of
     Normally 0, stdout
       | String.null stdout -> do
@@ -221,7 +223,7 @@ handleSync tilPath = do
       fetch = "git -C " <> tilPath <> " fetch origin main -q"
       rebase = "git -C " <> tilPath <> " rebase -q"
       fetchAndRebase = fetch <> " && " <> rebase
-    TIL.Process.exec fetchAndRebase (_ { timeout = Just 5_000.0 }) Nothing
+    TIL.Process.exec fetchAndRebase (_ { timeout = Just 5_000.0 })
 
   case gitFetchAndRebaseResult.exit of
     Normally 0 -> pure unit
