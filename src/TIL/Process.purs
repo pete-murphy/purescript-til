@@ -1,4 +1,8 @@
-module TIL.Process where
+module TIL.Process
+  ( Result
+  , exec
+  , spawn
+  ) where
 
 import Prelude
 
