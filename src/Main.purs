@@ -194,7 +194,7 @@ handleEditNew tilPath = do
 
 handleSync :: String -> Aff Unit
 handleSync tilPath = do
-  gitStatusResult <- TIL.Process.exec (String.joinWith " " [ "git", "-C", tilPath, "status", "--porcelain" ]) identity
+  gitStatusResult <- TIL.Process.exec (String.joinWith " " [ "git", "-C", tilPath, "status", "--porcelain" ]) (_ { cwd = Just tilPath })
   case gitStatusResult.exit of
     Normally 1 -> pure unit
     Normally 0 -> do
