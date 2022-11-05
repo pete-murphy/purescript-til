@@ -1,15 +1,13 @@
 import * as child_process from "child_process";
 
 // Run an interactive command, returning the results.
-export const interactive = (
-  command: string,
-  opts: child_process.SpawnOptionsWithoutStdio | undefined
-) =>
+export const interactive_ = (command: string, cwd: string) =>
   new Promise((resolve, reject) => {
+    console.log({ cwd });
     const shell = child_process.spawn(command, {
       stdio: [0, null, 2],
       shell: true,
-      ...opts,
+      cwd,
     });
     let results = "";
     shell.stdout?.on("data", (data) => {

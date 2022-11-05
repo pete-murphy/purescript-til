@@ -5,5 +5,5 @@
     "lib": ["ES6"],
     "newLine": "LF"
   },
-  "include": ["src/*.ts"]
+  "include": ["src/**/*.ts"]
 }

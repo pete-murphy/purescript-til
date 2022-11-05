@@ -31,6 +31,7 @@
   , "node-streams-aff"
   , "nullable"
   , "numbers"
+  , "pathy"
   , "posix-types"
   , "prelude"
   , "record"

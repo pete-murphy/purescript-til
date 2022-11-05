@@ -4,6 +4,7 @@ import Prelude
 
 import ArgParse.Basic (ArgParser)
 import ArgParse.Basic as ArgParse
+import Control.Promise (Promise)
 import Data.Array as Array
 import Data.Array.NonEmpty (NonEmptyArray)
 import Data.Array.NonEmpty as Array.NonEmpty
@@ -26,7 +27,9 @@ import Effect.Aff as Aff
 import Effect.Class as Effect
 import Effect.Class.Console as Console
 import Effect.Exception as Exception
-import Node.ChildProcess (ChildProcess, Exit(..))
+import Effect.Uncurried (EffectFn2)
+import Effect.Uncurried as Uncurried
+import Node.ChildProcess (ChildProcess, Exit(..), SpawnOptions)
 import Node.ChildProcess as ChildProcess
 import Node.Encoding (Encoding(..))
 import Node.FS.Aff as FS.Aff
@@ -174,14 +177,26 @@ main = Aff.launchAff_ do
                     <> "--line-range=:500 {}.md\" --preview-window=right,70%,border-none"
                 echoEntries = "echo " <> show (String.joinWith "\n" (Slug.toString <$> existingEntries))
                 echoAndFzf = echoEntries <> " | " <> fzfList
-                stdio = ChildProcess.inherit # Array.mapWithIndex \i x -> if i == 1 then Nothing else x
 
-              _ <- TIL.Process.spawn echoAndFzf []
-                -- TODO: shell should be in SpawnOptions
-                (Unsafe.unsafeCoerce (_ { stdio = stdio, shell = true }))
-              Debug.traceM "No title specified"
-              Debug.traceM "TODO: here we should show fzf"
+              -- stdio = ChildProcess.inherit # Array.mapWithIndex \i x -> if i == 1 then Nothing else x
+              -- _ <- TIL.Process.spawn echoAndFzf []
+              --   -- TODO: shell should be in SpawnOptions
+              --   (Unsafe.unsafeCoerce (_ { stdio = stdio, shell = true }))
+
+              fileNameSlug <- TIL.Process.interactive echoAndFzf entriesPath
+                <#> String.trim >>> Slug.parse
+                # onNothingM do
+                    Console.log ("Failed to parse filename as slug")
+                    Effect.liftEffect (Process.exit 1)
+
               Debug.traceM { existingEntries }
+
+              let
+                fileName =
+                  Path.concat [ entriesPath, Slug.toString fileNameSlug <> ".md" ]
+
+              Debug.traceM ("TODO: Here we should actually open an editor to edit " <> fileName)
+              FS.Aff.appendTextFile UTF8 fileName ("\n------------\n\nHey look I'm appending to this file\n")
 
   where
   askToMake :: String -> Aff Unit
@@ -246,6 +261,3 @@ whenNothingM mma ma = mma >>= Maybe.maybe ma pure
 
 onNothingM :: forall m a. Monad m => m a -> m (Maybe a) -> m a
 onNothingM = flip whenNothingM
-
--- | Might not use
-foreign import interactive :: forall a. a
