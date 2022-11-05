@@ -195,18 +195,20 @@ handleEditNew tilPath = do
 handleSync :: String -> Aff Unit
 handleSync tilPath = do
   gitStatusResult <- TIL.Process.exec (String.joinWith " " [ "git", "-C", tilPath, "status", "--porcelain" ]) (_ { cwd = Just tilPath })
-  case gitStatusResult.exit of
-    Normally 1 -> pure unit
-    Normally 0 -> do
-      Console.log "Dirty repo, stash or commit changes?\n"
-      Console.log gitStatusResult.stdout
-      Effect.liftEffect do
-        Process.exit 1
-    Normally n -> do
+  case gitStatusResult.exit, gitStatusResult.stdout of
+    Normally 0, stdout
+      | String.null stdout -> do
+          Debug.traceM "Good, repo not dirty"
+      | otherwise -> do
+          Console.log "Dirty repo, stash or commit changes?\n"
+          Console.log stdout
+          Effect.liftEffect do
+            Process.exit 1
+    Normally n, _ -> do
       Console.log ("Exiting with code: " <> show n)
       Effect.liftEffect do
         Process.exit n
-    BySignal signal -> do
+    BySignal signal, _ -> do
       Effect.liftEffect do
         Exception.throw ("Killed by signal: " <> show signal)
 
