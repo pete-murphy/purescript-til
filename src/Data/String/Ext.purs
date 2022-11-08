@@ -53,4 +53,4 @@ escape :: String -> String
 escape = quote <<< String.replaceAll (Pattern "\"") (Replacement "\\\"")
 
 quote :: String -> String
-quote = Foldable.surround "\"\"" <<< List.singleton
+quote = Foldable.surround "\"" <<< List.singleton

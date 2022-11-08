@@ -183,7 +183,9 @@ main = Aff.launchAff_ do
                       let filePath = Path.concat [ entriesPath, Slug.toString titleSlug <> ".md" ]
 
                       FS.Aff.writeTextFile UTF8 tempFile frontMatter
-                      TIL.Process.edit (String.quote "+silent 0read " <> tempFile <> " +\\$d +8 +start " <> String.escape filePath)
+                      let command_ = String.quote ("+silent 0read " <> tempFile) <> " +\\$d +8 +start " <> String.escape filePath
+                      Debug.traceM { command_ }
+                      TIL.Process.edit command_
 
                       pure { filePath, alreadyExists: false }
 
