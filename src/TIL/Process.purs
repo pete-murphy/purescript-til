@@ -1,24 +1,23 @@
 module TIL.Process
   ( Result
+  , edit
   , exec
   , interactive
   , spawn
   ) where
 
-import Prelude
+import TIL.Prelude
 
 import Control.Promise (Promise)
 import Control.Promise as Promise
 import Data.Either (Either(..))
-import Data.Either as Either
 import Data.Foldable as Foldable
-import Data.Maybe (Maybe)
 import Data.Maybe as Maybe
 import Data.Posix.Signal (Signal(..))
 import Effect.Aff (Aff)
 import Effect.Aff as Aff
 import Effect.Ref as Ref
-import Effect.Uncurried (EffectFn2)
+import Effect.Uncurried (EffectFn1, EffectFn2)
 import Effect.Uncurried as Uncurried
 import Node.Buffer as Buffer
 import Node.ChildProcess (ExecOptions, Exit(..), SpawnOptions)
@@ -82,9 +81,15 @@ spawn command args modifyOptions = Aff.makeAff \k -> do
 -- TODO: Not FFI
 foreign import interactive_ :: EffectFn2 String String (Promise String)
 
-interactive ∷ String → String → Aff String
+interactive :: String -> String -> Aff String
 interactive command cwd = do
   let
     -- options = modifyOptions ChildProcess.defaultSpawnOptions
     promise = Uncurried.runEffectFn2 interactive_ command cwd
   Promise.toAffE promise
+
+-- TODO: Not FFI
+foreign import edit_ :: EffectFn1 String (Promise Unit)
+
+edit :: String -> Aff Unit
+edit = Promise.toAffE <<< Uncurried.runEffectFn1 edit_
