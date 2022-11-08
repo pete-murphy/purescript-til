@@ -4,8 +4,10 @@ module TIL.Prelude
   , for_
   , module Prelude
   , notElem
+  , onNothing
   , onNothingM
   , traverse_
+  , whenNothing
   , whenNothingM
   ) where
 
@@ -31,8 +33,14 @@ traverse_ = Foldable.traverse_
 foldMap :: forall (f :: Type -> Type) (a :: Type) (m :: Type). Foldable f => Monoid m => (a -> m) -> f a -> m
 foldMap = Foldable.foldMap
 
-whenNothingM :: forall m a. Monad m => m (Maybe a) -> m a -> m a
-whenNothingM mma ma = mma >>= Maybe.maybe ma pure
-
 onNothingM :: forall m a. Monad m => m a -> m (Maybe a) -> m a
-onNothingM = flip whenNothingM
+onNothingM ma = (_ >>= Maybe.maybe ma pure)
+
+whenNothingM :: forall m a. Monad m => m (Maybe a) -> m a -> m a
+whenNothingM = flip onNothingM
+
+onNothing :: forall m a. Monad m => m a -> Maybe a -> m a
+onNothing ma = Maybe.maybe ma pure
+
+whenNothing :: forall m a. Monad m => Maybe a -> m a -> m a
+whenNothing = flip onNothing
