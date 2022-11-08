@@ -160,13 +160,12 @@ main = Aff.launchAff_ do
               , titleSlug `notElem` existingEntries -> do
                   Debug.traceM "Making a new file"
                   Aff.bracket
-                    (_.stdout <$> TIL.Process.exec "mktemp" identity)
+                    (TIL.Process.exec "mktemp" identity <#> _.stdout >>> String.trimEnd)
                     FS.Aff.unlink
                     \tempFile -> do
                       RFC3339String dateString <- Effect.liftEffect do
                         Now.nowDateTime
                           <#> RFC3339String.fromDateTime
-                          >>> RFC3339String.trim
                       tags <- do
                         -- TODO: parse tags from existing files
                         pure []
@@ -177,7 +176,9 @@ main = Aff.launchAff_ do
                           , "permalink: " <> Slug.toString titleSlug
                           , "date: " <> dateString
                           , "tags: " <> if Array.null tags then "" else "[" <> String.joinWith "," tags <> "]"
+                          , ""
                           , "---"
+                          , "\n\n"
                           ]
 
                       let filePath = Path.concat [ entriesPath, Slug.toString titleSlug <> ".md" ]
