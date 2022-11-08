@@ -1,6 +1,6 @@
 module TIL.FS where
 
-import Prelude
+import TIL.Prelude
 
 import Data.Either (Either(..))
 import Data.Function.Uncurried as Uncurried

@@ -1,24 +1,18 @@
 module Main where
 
-import Prelude
+import TIL.Prelude
 
 import ArgParse.Basic (ArgParser)
 import ArgParse.Basic as ArgParse
-import Control.Promise (Promise)
 import Data.Array as Array
-import Data.Array.NonEmpty (NonEmptyArray)
 import Data.Array.NonEmpty as Array.NonEmpty
 import Data.Either (Either(..))
 import Data.Either as Either
-import Data.Foldable as Foldable
 import Data.Maybe (Maybe(..))
-import Data.Maybe as Maybe
 import Data.String (Pattern(..))
 import Data.String as String
 import Data.String.CaseInsensitive (CaseInsensitiveString(..))
-import Data.String.NonEmpty (NonEmptyString)
 import Data.String.NonEmpty as String.NonEmpty
-import Data.Traversable (class Traversable)
 import Data.Traversable as Traversable
 import Debug as Debug
 import Effect (Effect)
@@ -27,10 +21,7 @@ import Effect.Aff as Aff
 import Effect.Class as Effect
 import Effect.Class.Console as Console
 import Effect.Exception as Exception
-import Effect.Uncurried (EffectFn2)
-import Effect.Uncurried as Uncurried
-import Node.ChildProcess (ChildProcess, Exit(..), SpawnOptions)
-import Node.ChildProcess as ChildProcess
+import Node.ChildProcess (Exit(..))
 import Node.Encoding (Encoding(..))
 import Node.FS.Aff as FS.Aff
 import Node.FS.Async as FS.Async
@@ -42,7 +33,6 @@ import TIL.FS as TIL.FS
 import TIL.Process as TIL.Process
 import TIL.Title (Title)
 import TIL.Title as Title
-import Unsafe.Coerce as Unsafe
 
 type EditParams =
   { title :: Title
@@ -92,7 +82,7 @@ parser =
           -- Probably not reachable?
           (Array.NonEmpty.fromArray >>> Either.note "Expected non-empty list of files")
       # ArgParse.optional
-      <#> Foldable.foldMap Array.fromFoldable
+      <#> foldMap Array.fromFoldable
 
 main :: Effect Unit
 main = Aff.launchAff_ do
@@ -151,24 +141,25 @@ main = Aff.launchAff_ do
             rawEntries <- TIL.Process.exec listAllFiles (_ { cwd = Just entriesPath }) <#> _.stdout
               >>> String.trim
               >>> String.NonEmpty.fromString
-              >>> Foldable.foldMap (String.NonEmpty.toString >>> String.split (Pattern "\n"))
+              >>> foldMap (String.NonEmpty.toString >>> String.split (Pattern "\n"))
             case Traversable.traverse Slug.generate rawEntries of
               Just slugEntries -> do
                 pure slugEntries
               Nothing -> do
                 Console.log "Failed to parse existing entries as slugs"
-                Foldable.for_ rawEntries Console.logShow
+                for_ rawEntries Console.logShow
                 Effect.liftEffect (Process.exit 1)
 
           case mbEditParams of
             Just { title, mediaFilePaths }
-              | Title.slug title `Foldable.elem` existingEntries -> do
+              | Title.slug title `elem` existingEntries -> do
                   Console.log "Title already exists"
                   Debug.traceM "TODO: here we should edit it"
               | otherwise -> do
                   let newFileName = Slug.toString (Title.slug title) <> ".md"
                   Debug.traceM ("Writing to: " <> newFileName)
                   FS.Aff.writeTextFile UTF8 newFileName ("Testing:\n\n" <> String.joinWith "\n" mediaFilePaths)
+
             Nothing -> do
               let
                 fzfList =
@@ -178,13 +169,9 @@ main = Aff.launchAff_ do
                 echoEntries = "echo " <> show (String.joinWith "\n" (Slug.toString <$> existingEntries))
                 echoAndFzf = echoEntries <> " | " <> fzfList
 
-              -- stdio = ChildProcess.inherit # Array.mapWithIndex \i x -> if i == 1 then Nothing else x
-              -- _ <- TIL.Process.spawn echoAndFzf []
-              --   -- TODO: shell should be in SpawnOptions
-              --   (Unsafe.unsafeCoerce (_ { stdio = stdio, shell = true }))
-
               fileNameSlug <- TIL.Process.interactive echoAndFzf entriesPath
-                <#> String.trim >>> Slug.parse
+                <#> String.trim
+                >>> Slug.parse
                 # onNothingM do
                     Console.log ("Failed to parse filename as slug")
                     Effect.liftEffect (Process.exit 1)
@@ -196,7 +183,8 @@ main = Aff.launchAff_ do
                   Path.concat [ entriesPath, Slug.toString fileNameSlug <> ".md" ]
 
               Debug.traceM ("TODO: Here we should actually open an editor to edit " <> fileName)
-              FS.Aff.appendTextFile UTF8 fileName ("\n------------\n\nHey look I'm appending to this file\n")
+
+  -- FS.Aff.appendTextFile UTF8 fileName ("\n------------\n\nHey look I'm appending to this file\n")
 
   where
   askToMake :: String -> Aff Unit
@@ -256,8 +244,3 @@ handleSync tilPath = do
       Effect.liftEffect do
         Exception.throw ("Killed by signal: " <> show signal)
 
-whenNothingM :: forall m a. Monad m => m (Maybe a) -> m a -> m a
-whenNothingM mma ma = mma >>= Maybe.maybe ma pure
-
-onNothingM :: forall m a. Monad m => m a -> m (Maybe a) -> m a
-onNothingM = flip whenNothingM

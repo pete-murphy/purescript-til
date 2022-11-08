@@ -5,7 +5,7 @@ module TIL.Title
   , slug
   ) where
 
-import Prelude
+import TIL.Prelude
 
 import Data.Maybe (Maybe)
 import Data.String.NonEmpty (NonEmptyString)
