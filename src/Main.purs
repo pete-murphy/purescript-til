@@ -1,4 +1,4 @@
-module Main where
+module Main (main) where
 
 import TIL.Prelude
 
@@ -8,10 +8,13 @@ import Data.Array as Array
 import Data.Array.NonEmpty as Array.NonEmpty
 import Data.Either (Either(..))
 import Data.Either as Either
+import Data.Lazy as Data.Lazy
 import Data.Maybe (Maybe(..))
-import Data.String (Pattern(..))
-import Data.String as String
+import Data.RFC3339String (RFC3339String(..))
+import Data.RFC3339String as RFC3339String
 import Data.String.CaseInsensitive (CaseInsensitiveString(..))
+import Data.String.Ext (Pattern(..))
+import Data.String.Ext as String
 import Data.String.NonEmpty as String.NonEmpty
 import Data.Traversable as Traversable
 import Debug as Debug
@@ -21,6 +24,7 @@ import Effect.Aff as Aff
 import Effect.Class as Effect
 import Effect.Class.Console as Console
 import Effect.Exception as Exception
+import Effect.Now as Now
 import Node.ChildProcess (Exit(..))
 import Node.Encoding (Encoding(..))
 import Node.FS.Aff as FS.Aff
@@ -124,7 +128,7 @@ main = Aff.launchAff_ do
           handleSync tilPath
           pure unit
 
-        Edit mbEditParams -> do
+        Edit maybeEditParams -> do
           handleSync tilPath
 
           existingEntries <- do
@@ -150,17 +154,43 @@ main = Aff.launchAff_ do
                 for_ rawEntries Console.logShow
                 Effect.liftEffect (Process.exit 1)
 
-          case mbEditParams of
+          { filePath, alreadyExists } <- case maybeEditParams of
             Just { title, mediaFilePaths }
-              | Title.slug title `elem` existingEntries -> do
-                  Console.log "Title already exists"
-                  Debug.traceM "TODO: here we should edit it"
-              | otherwise -> do
-                  let newFileName = Slug.toString (Title.slug title) <> ".md"
-                  Debug.traceM ("Writing to: " <> newFileName)
-                  FS.Aff.writeTextFile UTF8 newFileName ("Testing:\n\n" <> String.joinWith "\n" mediaFilePaths)
+              | titleSlug <- Title.slug title
+              , titleSlug `notElem` existingEntries -> do
+                  Debug.traceM "Making a new file"
+                  Aff.bracket
+                    (_.stdout <$> TIL.Process.exec "mktemp" identity)
+                    FS.Aff.unlink
+                    \tempFile -> do
+                      RFC3339String dateString <- Effect.liftEffect do
+                        Now.nowDateTime
+                          <#> RFC3339String.fromDateTime
+                          >>> RFC3339String.trim
+                      tags <- do
+                        -- TODO: parse tags from existing files
+                        pure []
+                      let
+                        frontMatter = String.joinWith "\n"
+                          [ "---"
+                          , "title: " <> String.NonEmpty.toString (Title.full title)
+                          , "permalink: " <> Slug.toString titleSlug
+                          , "date: " <> dateString
+                          , "tags: " <> if Array.null tags then "" else "[" <> String.joinWith "," tags <> "]"
+                          , "---"
+                          ]
 
-            Nothing -> do
+                      let filePath = Path.concat [ entriesPath, Slug.toString titleSlug <> ".md" ]
+
+                      FS.Aff.writeTextFile UTF8 tempFile frontMatter
+                      TIL.Process.edit (String.quote "+silent 0read " <> tempFile <> " +\\$d +8 +start " <> String.escape filePath)
+
+                      pure { filePath, alreadyExists: false }
+
+            -- `fileAlreadyExists` covers both cases
+            --   * an existing filename was specified
+            --   * no filename was specified (in which case we select from a list)
+            fileAlreadyExists -> do
               let
                 fzfList =
                   "fzf --no-multi --layout=reverse --margin 7% "
@@ -169,22 +199,25 @@ main = Aff.launchAff_ do
                 echoEntries = "echo " <> show (String.joinWith "\n" (Slug.toString <$> existingEntries))
                 echoAndFzf = echoEntries <> " | " <> fzfList
 
-              fileNameSlug <- TIL.Process.interactive echoAndFzf entriesPath
-                <#> String.trim
-                >>> Slug.parse
-                # onNothingM do
-                    Console.log ("Failed to parse filename as slug")
-                    Effect.liftEffect (Process.exit 1)
+              titleSlug <-
+                fileAlreadyExists <#> _.title >>> Title.slug >>> Just
+                  # onNothing do
+                      TIL.Process.interactive echoAndFzf entriesPath
+                        <#> (String.trim >>> Slug.parse)
+                  # onNothingM do
+                      Console.log ("Failed to parse filename as slug")
+                      Effect.liftEffect (Process.exit 1)
 
-              Debug.traceM { existingEntries }
+              let filePath = Path.concat [ entriesPath, Slug.toString titleSlug <> ".md" ]
 
-              let
-                fileName =
-                  Path.concat [ entriesPath, Slug.toString fileNameSlug <> ".md" ]
+              TIL.Process.edit (String.escape ("+8 " <> filePath))
 
-              Debug.traceM ("TODO: Here we should actually open an editor to edit " <> fileName)
+              pure { filePath, alreadyExists: true }
 
-  -- FS.Aff.appendTextFile UTF8 fileName ("\n------------\n\nHey look I'm appending to this file\n")
+          Debug.traceM "TODO: Continuation"
+          Debug.traceM { filePath, alreadyExists }
+
+          pure unit
 
   where
   askToMake :: String -> Aff Unit
@@ -203,9 +236,7 @@ main = Aff.launchAff_ do
     let canceler = Aff.effectCanceler (ReadLine.close interface)
     pure canceler
 
-handleEditNew :: String -> Aff Unit
-handleEditNew tilPath = do
-  pure unit
+-- TIL.Process edit
 
 handleSync :: String -> Aff Unit
 handleSync tilPath = do
