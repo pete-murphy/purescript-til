@@ -34,6 +34,7 @@ import Node.Process as Process
 import Node.ReadLine as ReadLine
 import Slug as Slug
 import TIL.FS as TIL.FS
+import TIL.Process (Result)
 import TIL.Process as TIL.Process
 import TIL.Title (Title)
 import TIL.Title as Title
@@ -217,10 +218,25 @@ main = Aff.launchAff_ do
 
               pure { filePath, alreadyExists: true }
 
-          Debug.traceM "TODO: Continuation"
-          Debug.traceM { filePath, alreadyExists }
+          -- Look for lack of changes
+          gitStatus tilPath \{ dirty } -> do
+            when (not dirty) do
+              if alreadyExists then do
+                Effect.liftEffect (Process.exit 0)
+              else do
+                Effect.liftEffect (Process.exit 1)
 
-          pure unit
+          -- TODO: Ensure the file can parse
+
+          -- Update the repo
+          -- TODO: Get correctTitle from frontmatter (may have been edited?)
+
+          -- TODO: Copy media files into entriesPath
+
+          -- TODO: Format the file with prettier
+
+          -- then state and commit
+          stageAndCommit tilPath filePath alreadyExists
 
   where
   askToMake :: String -> Aff Unit
@@ -239,27 +255,16 @@ main = Aff.launchAff_ do
     let canceler = Aff.effectCanceler (ReadLine.close interface)
     pure canceler
 
--- TIL.Process edit
-
 handleSync :: String -> Aff Unit
 handleSync tilPath = do
-  gitStatusResult <- TIL.Process.exec (String.joinWith " " [ "git", "-C", tilPath, "status", "--porcelain" ]) (_ { cwd = Just tilPath })
-  case gitStatusResult.exit, gitStatusResult.stdout of
-    Normally 0, stdout
-      | String.null stdout -> do
-          Debug.traceM "Good, repo not dirty"
-      | otherwise -> do
-          Console.log "Dirty repo, stash or commit changes?\n"
-          Console.log stdout
-          Effect.liftEffect do
-            Process.exit 1
-    Normally n, _ -> do
-      Console.log ("Exiting with code: " <> show n)
+  gitStatus tilPath \{ result: { stdout }, dirty } ->
+    if (not dirty) then do
+      Debug.traceM "Good, repo not dirty"
+    else do
+      Console.log "Dirty repo, stash or commit changes?\n"
+      Console.log stdout
       Effect.liftEffect do
-        Process.exit n
-    BySignal signal, _ -> do
-      Effect.liftEffect do
-        Exception.throw ("Killed by signal: " <> show signal)
+        Process.exit 1
 
   gitFetchAndRebaseResult <- do
     let
@@ -278,3 +283,33 @@ handleSync tilPath = do
       Effect.liftEffect do
         Exception.throw ("Killed by signal: " <> show signal)
 
+gitStatus :: String -> ({ result :: Result, dirty :: Boolean } -> Aff Unit) -> Aff Unit
+gitStatus tilPath f = do
+  result <- TIL.Process.exec (String.joinWith " " [ "git -C", tilPath, "status --porcelain" ]) identity
+  case result.exit, result.stdout of
+    Normally 0, stdout
+      | String.null stdout -> do
+          f { result, dirty: false }
+      | otherwise -> do
+          f { result, dirty: true }
+    Normally n, _ -> do
+      Console.log ("Exiting with code: " <> show n)
+      Effect.liftEffect do
+        Process.exit n
+    BySignal signal, _ -> do
+      Effect.liftEffect do
+        Exception.throw ("Killed by signal: " <> show signal)
+
+stageAndCommit :: String -> String -> Boolean -> Aff Unit
+stageAndCommit tilPath fileName alreadyExists = do
+  let
+    stage = "git -C " <> tilPath <> " add -A"
+    commit = "git -C " <> tilPath <> " commit -q -m " <>
+      if alreadyExists then "edit" else "add" <> ": " <> String.quote fileName
+    push = "git -C " <> tilPath <> " push -q"
+    echoDone =
+      "echo \"Published " <> String.quote fileName <> " \" || " <>
+        "echo \"Nothing to publish\""
+    command = String.joinWith " && " [ stage, commit, push, echoDone ]
+  _ <- TIL.Process.exec command (_ { timeout = Just 5_000.0 })
+  pure unit
